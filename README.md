@@ -98,29 +98,49 @@ Controls the power state of a specific outlet.
 
 ## Examples
 
-### Get Service Root
+### Using the Example Client
+
+The repository includes a Python client (`example_client.py`) for easy interaction:
+
+```bash
+# List all outlets and their status
+python example_client.py --server http://localhost:5000 --action list
+
+# Get status of a specific outlet
+python example_client.py --server http://localhost:5000 --action status --outlet 0
+
+# Turn on outlet 0
+python example_client.py --server http://localhost:5000 --action on --outlet 0
+
+# Turn off outlet 0
+python example_client.py --server http://localhost:5000 --action off --outlet 0
+```
+
+### Using cURL
+
+#### Get Service Root
 ```bash
 curl http://localhost:5000/redfish/v1/
 ```
 
-### List All Outlets
+#### List All Outlets
 ```bash
 curl http://localhost:5000/redfish/v1/Chassis/PowerStrip/Outlets
 ```
 
-### Get Outlet Status
+#### Get Outlet Status
 ```bash
 curl http://localhost:5000/redfish/v1/Chassis/PowerStrip/Outlets/0
 ```
 
-### Turn On Outlet 0
+#### Turn On Outlet 0
 ```bash
 curl -X POST http://localhost:5000/redfish/v1/Chassis/PowerStrip/Outlets/0/Actions/Outlet.PowerControl \
   -H "Content-Type: application/json" \
   -d '{"PowerState": "On"}'
 ```
 
-### Turn Off Outlet 0
+#### Turn Off Outlet 0
 ```bash
 curl -X POST http://localhost:5000/redfish/v1/Chassis/PowerStrip/Outlets/0/Actions/Outlet.PowerControl \
   -H "Content-Type: application/json" \
