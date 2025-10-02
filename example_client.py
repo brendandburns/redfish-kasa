@@ -46,9 +46,11 @@ class RedfishClient:
         response.raise_for_status()
         return response.json()
     
+
+    
     def get_outlets(self):
         """Get all outlets."""
-        response = self.session.get(f"{self.base_url}/redfish/v1/Chassis/PowerStrip/Outlets")
+        response = self.session.get(f"{self.base_url}/redfish/v1/Chassis/PowerStrip/PowerSubsystem/Outlets")
         response.raise_for_status()
         return response.json()
     
@@ -60,7 +62,7 @@ class RedfishClient:
             outlet_id: ID of the outlet (0-5 for HS300)
         """
         response = self.session.get(
-            f"{self.base_url}/redfish/v1/Chassis/PowerStrip/Outlets/{outlet_id}"
+            f"{self.base_url}/redfish/v1/Chassis/PowerStrip/PowerSubsystem/Outlets/{outlet_id}"
         )
         response.raise_for_status()
         return response.json()
@@ -74,7 +76,7 @@ class RedfishClient:
             power_state: "On" or "Off"
         """
         response = self.session.post(
-            f"{self.base_url}/redfish/v1/Chassis/PowerStrip/Outlets/{outlet_id}/Actions/Outlet.PowerControl",
+            f"{self.base_url}/redfish/v1/Chassis/PowerStrip/PowerSubsystem/Outlets/{outlet_id}/Actions/Outlet.PowerControl",
             json={"PowerState": power_state}
         )
         response.raise_for_status()

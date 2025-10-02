@@ -61,6 +61,18 @@ GET /redfish/v1/
 ```
 Returns the Redfish service root with links to available resources.
 
+### Version Discovery
+```
+GET /redfish
+```
+Returns available Redfish API versions.
+
+### Metadata
+```
+GET /redfish/v1/$metadata
+```
+Returns the OData metadata document describing the service.
+
 ### Chassis Collection
 ```
 GET /redfish/v1/Chassis
@@ -71,23 +83,35 @@ Returns the collection of chassis (power strips).
 ```
 GET /redfish/v1/Chassis/PowerStrip
 ```
-Returns detailed information about the power strip including model, status, and links to outlets.
+Returns detailed information about the power strip including model, status, and links to power subsystem.
+
+### Power Resource
+```
+GET /redfish/v1/Chassis/PowerStrip/Power
+```
+Returns power information including PowerControl array for all outlets.
+
+### Power Subsystem
+```
+GET /redfish/v1/Chassis/PowerStrip/PowerSubsystem
+```
+Returns the power subsystem with links to outlets and power supplies.
 
 ### Outlets Collection
 ```
-GET /redfish/v1/Chassis/PowerStrip/Outlets
+GET /redfish/v1/Chassis/PowerStrip/PowerSubsystem/Outlets
 ```
 Returns the collection of all available outlets.
 
 ### Individual Outlet
 ```
-GET /redfish/v1/Chassis/PowerStrip/Outlets/{outlet_id}
+GET /redfish/v1/Chassis/PowerStrip/PowerSubsystem/Outlets/{outlet_id}
 ```
 Returns information about a specific outlet (outlet_id: 0-5 for HS300).
 
 ### Power Control
 ```
-POST /redfish/v1/Chassis/PowerStrip/Outlets/{outlet_id}/Actions/Outlet.PowerControl
+POST /redfish/v1/Chassis/PowerStrip/PowerSubsystem/Outlets/{outlet_id}/Actions/Outlet.PowerControl
 Content-Type: application/json
 
 {
@@ -123,26 +147,36 @@ python example_client.py --server http://localhost:5000 --action off --outlet 0
 curl http://localhost:5000/redfish/v1/
 ```
 
+#### Get Redfish Versions
+```bash
+curl http://localhost:5000/redfish
+```
+
+#### Get Metadata
+```bash
+curl http://localhost:5000/redfish/v1/\$metadata
+```
+
 #### List All Outlets
 ```bash
-curl http://localhost:5000/redfish/v1/Chassis/PowerStrip/Outlets
+curl http://localhost:5000/redfish/v1/Chassis/PowerStrip/PowerSubsystem/Outlets
 ```
 
 #### Get Outlet Status
 ```bash
-curl http://localhost:5000/redfish/v1/Chassis/PowerStrip/Outlets/0
+curl http://localhost:5000/redfish/v1/Chassis/PowerStrip/PowerSubsystem/Outlets/0
 ```
 
 #### Turn On Outlet 0
 ```bash
-curl -X POST http://localhost:5000/redfish/v1/Chassis/PowerStrip/Outlets/0/Actions/Outlet.PowerControl \
+curl -X POST http://localhost:5000/redfish/v1/Chassis/PowerStrip/PowerSubsystem/Outlets/0/Actions/Outlet.PowerControl \
   -H "Content-Type: application/json" \
   -d '{"PowerState": "On"}'
 ```
 
 #### Turn Off Outlet 0
 ```bash
-curl -X POST http://localhost:5000/redfish/v1/Chassis/PowerStrip/Outlets/0/Actions/Outlet.PowerControl \
+curl -X POST http://localhost:5000/redfish/v1/Chassis/PowerStrip/PowerSubsystem/Outlets/0/Actions/Outlet.PowerControl \
   -H "Content-Type: application/json" \
   -d '{"PowerState": "Off"}'
 ```
@@ -155,16 +189,26 @@ The implementation uses:
 - **asyncio**: For asynchronous device communication
 
 The server maps Redfish concepts to power strip functionality:
-- **Chassis**: Represents the power strip itself
+- **Chassis**: Represents the physical power strip enclosure
+- **Power**: Power metrics and control information
+- **PowerSubsystem**: Power distribution subsystem with outlets and power supplies
+- **OutletGroup**: Logical grouping of outlets
 - **Outlets**: Individual controllable outlets on the power strip
+- **PowerSupply**: The AC input power supply
 - **Manager**: The software BMC managing the power strip
 
 ## Redfish Specification
 
 This implementation follows the DMTF Redfish specification v1.6.0:
+- ServiceRoot with proper metadata and version discovery endpoints
 - Chassis schema for physical hardware representation
-- Outlet schema for power distribution control
+- Power and PowerSubsystem schemas for power distribution
+- Outlet schema (v1.4.0) with detailed outlet control
+- PowerSupply schema for input power information
+- Manager schema for BMC representation
+- SessionService for authentication framework
 - Standard HTTP methods (GET, POST) for resource management
+- Proper @odata annotations for OData compliance
 
 ## Troubleshooting
 

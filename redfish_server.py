@@ -74,6 +74,14 @@ async def get_device_info():
     return None
 
 
+@app.route('/redfish', methods=['GET'])
+def redfish_version():
+    """Redfish version endpoint."""
+    return jsonify({
+        "v1": "/redfish/v1/"
+    })
+
+
 @app.route('/redfish/v1/', methods=['GET'])
 def service_root():
     """Redfish service root endpoint."""
@@ -90,8 +98,39 @@ def service_root():
         },
         "Systems": {
             "@odata.id": "/redfish/v1/Systems"
+        },
+        "Managers": {
+            "@odata.id": "/redfish/v1/Managers"
+        },
+        "Links": {
+            "Sessions": {
+                "@odata.id": "/redfish/v1/SessionService/Sessions"
+            }
         }
     })
+
+
+@app.route('/redfish/v1/$metadata', methods=['GET'])
+def metadata():
+    """Redfish metadata endpoint."""
+    # Return minimal metadata document
+    metadata_xml = '''<?xml version="1.0" encoding="UTF-8"?>
+<edmx:Edmx xmlns:edmx="http://docs.oasis-open.org/odata/ns/edmx" Version="4.0">
+    <edmx:Reference Uri="http://redfish.dmtf.org/schemas/v1/ServiceRoot_v1.xml">
+        <edmx:Include Namespace="ServiceRoot"/>
+        <edmx:Include Namespace="ServiceRoot.v1_5_0"/>
+    </edmx:Reference>
+    <edmx:Reference Uri="http://redfish.dmtf.org/schemas/v1/Chassis_v1.xml">
+        <edmx:Include Namespace="Chassis"/>
+        <edmx:Include Namespace="Chassis.v1_10_0"/>
+    </edmx:Reference>
+    <edmx:DataServices>
+        <Schema xmlns="http://docs.oasis-open.org/odata/ns/edm" Namespace="Service">
+            <EntityContainer Name="Service" Extends="ServiceRoot.v1_5_0.ServiceContainer"/>
+        </Schema>
+    </edmx:DataServices>
+</edmx:Edmx>'''
+    return Response(metadata_xml, mimetype='application/xml')
 
 
 @app.route('/redfish/v1/Chassis', methods=['GET'])
@@ -117,40 +156,187 @@ def chassis_power_strip():
     if not dev:
         return jsonify({"error": "Device not connected"}), 503
     
-    # Get outlet information
-    outlets = []
-    for i, plug in enumerate(dev.children):
-        outlets.append({
-            "@odata.id": f"/redfish/v1/Chassis/PowerStrip/Outlets/{i}"
-        })
-    
     return jsonify({
         "@odata.context": "/redfish/v1/$metadata#Chassis.Chassis",
         "@odata.id": "/redfish/v1/Chassis/PowerStrip",
         "@odata.type": "#Chassis.v1_10_0.Chassis",
         "Id": "PowerStrip",
         "Name": dev.alias,
-        "ChassisType": "PowerStrip",
+        "ChassisType": "RackMount",
         "Manufacturer": "TP-Link",
         "Model": dev.model,
         "SerialNumber": dev.device_id if hasattr(dev, 'device_id') else "Unknown",
+        "PartNumber": "HS300",
         "Status": {
             "State": "Enabled",
             "Health": "OK"
         },
         "PowerState": "On",
+        "Power": {
+            "@odata.id": "/redfish/v1/Chassis/PowerStrip/Power"
+        },
+        "PowerSubsystem": {
+            "@odata.id": "/redfish/v1/Chassis/PowerStrip/PowerSubsystem"
+        },
         "Links": {
             "ManagedBy": [
                 {"@odata.id": "/redfish/v1/Managers/BMC"}
             ]
-        },
-        "Outlets": {
-            "@odata.id": "/redfish/v1/Chassis/PowerStrip/Outlets"
         }
     })
 
 
-@app.route('/redfish/v1/Chassis/PowerStrip/Outlets', methods=['GET'])
+@app.route('/redfish/v1/Chassis/PowerStrip/Power', methods=['GET'])
+def chassis_power():
+    """Get the power resource for the chassis."""
+    dev = asyncio.run(get_device_info())
+    
+    if not dev:
+        return jsonify({"error": "Device not connected"}), 503
+    
+    # Build PowerControl array for each outlet
+    power_control = []
+    for i, plug in enumerate(dev.children):
+        power_control.append({
+            "@odata.id": f"/redfish/v1/Chassis/PowerStrip/Power#/PowerControl/{i}",
+            "MemberId": str(i),
+            "Name": plug.alias,
+            "PowerConsumedWatts": 0,  # HS300 doesn't provide real-time wattage easily
+            "PowerCapacityWatts": 1800,  # 15A * 120V typical
+            "Status": {
+                "State": "Enabled" if plug.is_on else "Disabled",
+                "Health": "OK"
+            }
+        })
+    
+    return jsonify({
+        "@odata.context": "/redfish/v1/$metadata#Power.Power",
+        "@odata.id": "/redfish/v1/Chassis/PowerStrip/Power",
+        "@odata.type": "#Power.v1_7_0.Power",
+        "Id": "Power",
+        "Name": "Power",
+        "PowerControl": power_control,
+        "PowerControl@odata.count": len(power_control)
+    })
+
+
+@app.route('/redfish/v1/Chassis/PowerStrip/PowerSubsystem', methods=['GET'])
+def power_subsystem():
+    """Get the power subsystem for the chassis."""
+    dev = asyncio.run(get_device_info())
+    
+    if not dev:
+        return jsonify({"error": "Device not connected"}), 503
+    
+    return jsonify({
+        "@odata.context": "/redfish/v1/$metadata#PowerSubsystem.PowerSubsystem",
+        "@odata.id": "/redfish/v1/Chassis/PowerStrip/PowerSubsystem",
+        "@odata.type": "#PowerSubsystem.v1_1_0.PowerSubsystem",
+        "Id": "PowerSubsystem",
+        "Name": "Power Subsystem",
+        "Status": {
+            "State": "Enabled",
+            "Health": "OK"
+        },
+        "PowerSupplies": {
+            "@odata.id": "/redfish/v1/Chassis/PowerStrip/PowerSubsystem/PowerSupplies"
+        },
+        "OutletGroups": {
+            "@odata.id": "/redfish/v1/Chassis/PowerStrip/PowerSubsystem/OutletGroups"
+        }
+    })
+
+
+@app.route('/redfish/v1/Chassis/PowerStrip/PowerSubsystem/PowerSupplies', methods=['GET'])
+def power_supplies_collection():
+    """Get the power supplies collection."""
+    return jsonify({
+        "@odata.context": "/redfish/v1/$metadata#PowerSupplyCollection.PowerSupplyCollection",
+        "@odata.id": "/redfish/v1/Chassis/PowerStrip/PowerSubsystem/PowerSupplies",
+        "@odata.type": "#PowerSupplyCollection.PowerSupplyCollection",
+        "Name": "Power Supply Collection",
+        "Members@odata.count": 1,
+        "Members": [
+            {"@odata.id": "/redfish/v1/Chassis/PowerStrip/PowerSubsystem/PowerSupplies/0"}
+        ]
+    })
+
+
+@app.route('/redfish/v1/Chassis/PowerStrip/PowerSubsystem/PowerSupplies/0', methods=['GET'])
+def power_supply():
+    """Get the main power supply (AC input)."""
+    dev = asyncio.run(get_device_info())
+    
+    if not dev:
+        return jsonify({"error": "Device not connected"}), 503
+    
+    return jsonify({
+        "@odata.context": "/redfish/v1/$metadata#PowerSupply.PowerSupply",
+        "@odata.id": "/redfish/v1/Chassis/PowerStrip/PowerSubsystem/PowerSupplies/0",
+        "@odata.type": "#PowerSupply.v1_5_0.PowerSupply",
+        "Id": "0",
+        "Name": "AC Input",
+        "Status": {
+            "State": "Enabled",
+            "Health": "OK"
+        },
+        "PowerSupplyType": "AC",
+        "LineInputVoltage": 120,
+        "Model": dev.model,
+        "Manufacturer": "TP-Link"
+    })
+
+
+@app.route('/redfish/v1/Chassis/PowerStrip/PowerSubsystem/OutletGroups', methods=['GET'])
+def outlet_groups_collection():
+    """Get the outlet groups collection."""
+    return jsonify({
+        "@odata.context": "/redfish/v1/$metadata#OutletGroupCollection.OutletGroupCollection",
+        "@odata.id": "/redfish/v1/Chassis/PowerStrip/PowerSubsystem/OutletGroups",
+        "@odata.type": "#OutletGroupCollection.OutletGroupCollection",
+        "Name": "Outlet Group Collection",
+        "Members@odata.count": 1,
+        "Members": [
+            {"@odata.id": "/redfish/v1/Chassis/PowerStrip/PowerSubsystem/OutletGroups/All"}
+        ]
+    })
+
+
+@app.route('/redfish/v1/Chassis/PowerStrip/PowerSubsystem/OutletGroups/All', methods=['GET'])
+def outlet_group():
+    """Get the outlet group containing all outlets."""
+    dev = asyncio.run(get_device_info())
+    
+    if not dev:
+        return jsonify({"error": "Device not connected"}), 503
+    
+    outlets = []
+    for i in range(len(dev.children)):
+        outlets.append({
+            "@odata.id": f"/redfish/v1/Chassis/PowerStrip/PowerSubsystem/Outlets/{i}"
+        })
+    
+    return jsonify({
+        "@odata.context": "/redfish/v1/$metadata#OutletGroup.OutletGroup",
+        "@odata.id": "/redfish/v1/Chassis/PowerStrip/PowerSubsystem/OutletGroups/All",
+        "@odata.type": "#OutletGroup.v1_1_0.OutletGroup",
+        "Id": "All",
+        "Name": "All Outlets",
+        "Status": {
+            "State": "Enabled",
+            "Health": "OK"
+        },
+        "CreatedBy": "System",
+        "PowerEnabled": True,
+        "PowerState": "On",
+        "Links": {
+            "Outlets": outlets,
+            "Outlets@odata.count": len(outlets)
+        }
+    })
+
+
+@app.route('/redfish/v1/Chassis/PowerStrip/PowerSubsystem/Outlets', methods=['GET'])
 def outlets_collection():
     """Get the collection of all outlets."""
     dev = asyncio.run(get_device_info())
@@ -161,12 +347,12 @@ def outlets_collection():
     members = []
     for i in range(len(dev.children)):
         members.append({
-            "@odata.id": f"/redfish/v1/Chassis/PowerStrip/Outlets/{i}"
+            "@odata.id": f"/redfish/v1/Chassis/PowerStrip/PowerSubsystem/Outlets/{i}"
         })
     
     return jsonify({
         "@odata.context": "/redfish/v1/$metadata#OutletCollection.OutletCollection",
-        "@odata.id": "/redfish/v1/Chassis/PowerStrip/Outlets",
+        "@odata.id": "/redfish/v1/Chassis/PowerStrip/PowerSubsystem/Outlets",
         "@odata.type": "#OutletCollection.OutletCollection",
         "Name": "Outlet Collection",
         "Members@odata.count": len(members),
@@ -174,7 +360,7 @@ def outlets_collection():
     })
 
 
-@app.route('/redfish/v1/Chassis/PowerStrip/Outlets/<int:outlet_id>', methods=['GET'])
+@app.route('/redfish/v1/Chassis/PowerStrip/PowerSubsystem/Outlets/<int:outlet_id>', methods=['GET'])
 def get_outlet(outlet_id: int):
     """Get information about a specific outlet."""
     dev = asyncio.run(get_device_info())
@@ -189,33 +375,51 @@ def get_outlet(outlet_id: int):
     
     return jsonify({
         "@odata.context": "/redfish/v1/$metadata#Outlet.Outlet",
-        "@odata.id": f"/redfish/v1/Chassis/PowerStrip/Outlets/{outlet_id}",
-        "@odata.type": "#Outlet.v1_1_0.Outlet",
+        "@odata.id": f"/redfish/v1/Chassis/PowerStrip/PowerSubsystem/Outlets/{outlet_id}",
+        "@odata.type": "#Outlet.v1_4_0.Outlet",
         "Id": str(outlet_id),
         "Name": plug.alias,
         "Status": {
             "State": "Enabled",
             "Health": "OK"
         },
-        "PowerState": "On" if plug.is_on else "Off",
+        "PhaseWiringType": "OnePhase3Wire",
+        "VoltageType": "AC",
+        "OutletType": "NEMA_5_15R",
+        "RatedCurrentAmps": 15,
+        "NominalVoltage": "AC120V",
         "PowerEnabled": plug.is_on,
+        "PowerState": "On" if plug.is_on else "Off",
         "PowerCycleDelaySeconds": 0,
+        "PowerOnDelaySeconds": 0,
+        "PowerOffDelaySeconds": 0,
+        "PowerRestoreDelaySeconds": 0,
+        "PowerRestorePolicy": "LastState",
         "Voltage": {
             "Reading": 120,
-            "DataSourceUri": f"/redfish/v1/Chassis/PowerStrip/Outlets/{outlet_id}/Metrics"
+            "DataSourceUri": f"/redfish/v1/Chassis/PowerStrip/PowerSubsystem/Outlets/{outlet_id}/Sensors/Voltage"
         },
         "Actions": {
             "#Outlet.PowerControl": {
-                "target": f"/redfish/v1/Chassis/PowerStrip/Outlets/{outlet_id}/Actions/Outlet.PowerControl"
+                "target": f"/redfish/v1/Chassis/PowerStrip/PowerSubsystem/Outlets/{outlet_id}/Actions/Outlet.PowerControl",
+                "PowerState@Redfish.AllowableValues": [
+                    "On",
+                    "Off"
+                ]
             },
             "#Outlet.ResetMetrics": {
-                "target": f"/redfish/v1/Chassis/PowerStrip/Outlets/{outlet_id}/Actions/Outlet.ResetMetrics"
+                "target": f"/redfish/v1/Chassis/PowerStrip/PowerSubsystem/Outlets/{outlet_id}/Actions/Outlet.ResetMetrics"
+            }
+        },
+        "Links": {
+            "BranchCircuit": {
+                "@odata.id": "/redfish/v1/Chassis/PowerStrip/PowerSubsystem/PowerSupplies/0"
             }
         }
     })
 
 
-@app.route('/redfish/v1/Chassis/PowerStrip/Outlets/<int:outlet_id>/Actions/Outlet.PowerControl', methods=['POST'])
+@app.route('/redfish/v1/Chassis/PowerStrip/PowerSubsystem/Outlets/<int:outlet_id>/Actions/Outlet.PowerControl', methods=['POST'])
 def outlet_power_control(outlet_id: int):
     """Control power state of an outlet."""
     dev = asyncio.run(get_device_info())
@@ -249,6 +453,58 @@ def outlet_power_control(outlet_id: int):
         return jsonify({"error": "Failed to control outlet power state"}), 500
 
 
+@app.route('/redfish/v1/Chassis/PowerStrip/PowerSubsystem/Outlets/<int:outlet_id>/Actions/Outlet.ResetMetrics', methods=['POST'])
+def outlet_reset_metrics(outlet_id: int):
+    """Reset metrics for an outlet."""
+    dev = asyncio.run(get_device_info())
+    
+    if not dev:
+        return jsonify({"error": "Device not connected"}), 503
+    
+    if outlet_id >= len(dev.children):
+        return jsonify({"error": "Outlet not found"}), 404
+    
+    # HS300 doesn't support resetting metrics, but return success for API compatibility
+    logger.info(f"Reset metrics requested for outlet {outlet_id}")
+    return jsonify({"status": "success"}), 200
+
+
+@app.route('/redfish/v1/SessionService', methods=['GET'])
+def session_service():
+    """Get the session service."""
+    return jsonify({
+        "@odata.context": "/redfish/v1/$metadata#SessionService.SessionService",
+        "@odata.id": "/redfish/v1/SessionService",
+        "@odata.type": "#SessionService.v1_1_7.SessionService",
+        "Id": "SessionService",
+        "Name": "Session Service",
+        "Description": "Session Service",
+        "Status": {
+            "State": "Enabled",
+            "Health": "OK"
+        },
+        "ServiceEnabled": True,
+        "SessionTimeout": 3600,
+        "Sessions": {
+            "@odata.id": "/redfish/v1/SessionService/Sessions"
+        }
+    })
+
+
+@app.route('/redfish/v1/SessionService/Sessions', methods=['GET'])
+def sessions_collection():
+    """Get the sessions collection."""
+    return jsonify({
+        "@odata.context": "/redfish/v1/$metadata#SessionCollection.SessionCollection",
+        "@odata.id": "/redfish/v1/SessionService/Sessions",
+        "@odata.type": "#SessionCollection.SessionCollection",
+        "Name": "Session Collection",
+        "Description": "Session Collection",
+        "Members@odata.count": 0,
+        "Members": []
+    })
+
+
 @app.route('/redfish/v1/Systems', methods=['GET'])
 def systems_collection():
     """Get the systems collection."""
@@ -259,6 +515,21 @@ def systems_collection():
         "Name": "Computer System Collection",
         "Members@odata.count": 0,
         "Members": []
+    })
+
+
+@app.route('/redfish/v1/Managers', methods=['GET'])
+def managers_collection():
+    """Get the managers collection."""
+    return jsonify({
+        "@odata.context": "/redfish/v1/$metadata#ManagerCollection.ManagerCollection",
+        "@odata.id": "/redfish/v1/Managers",
+        "@odata.type": "#ManagerCollection.ManagerCollection",
+        "Name": "Manager Collection",
+        "Members@odata.count": 1,
+        "Members": [
+            {"@odata.id": "/redfish/v1/Managers/BMC"}
+        ]
     })
 
 
@@ -276,6 +547,9 @@ def manager():
             "State": "Enabled",
             "Health": "OK"
         },
+        "UUID": "92384634-2938-2342-8820-489239905424",
+        "Model": "Redfish-Kasa BMC",
+        "FirmwareVersion": "1.0.0",
         "Links": {
             "ManagerForChassis": [
                 {"@odata.id": "/redfish/v1/Chassis/PowerStrip"}

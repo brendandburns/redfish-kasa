@@ -44,12 +44,18 @@ def validate_redfish_server():
     routes = re.findall(r"@app\.route\('([^']+)'", source)
     
     expected_routes = [
+        '/redfish',
         '/redfish/v1/',
+        '/redfish/v1/$metadata',
         '/redfish/v1/Chassis',
         '/redfish/v1/Chassis/PowerStrip',
-        '/redfish/v1/Chassis/PowerStrip/Outlets',
+        '/redfish/v1/Chassis/PowerStrip/Power',
+        '/redfish/v1/Chassis/PowerStrip/PowerSubsystem',
+        '/redfish/v1/Chassis/PowerStrip/PowerSubsystem/Outlets',
         '/redfish/v1/Systems',
-        '/redfish/v1/Managers/BMC'
+        '/redfish/v1/Managers',
+        '/redfish/v1/Managers/BMC',
+        '/redfish/v1/SessionService'
     ]
     
     for route in expected_routes:
