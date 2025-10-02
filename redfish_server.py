@@ -246,7 +246,7 @@ def outlet_power_control(outlet_id: int):
         return jsonify({"status": "success"}), 200
     except Exception as e:
         logger.error(f"Error controlling outlet {outlet_id}: {e}")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Failed to control outlet power state"}), 500
 
 
 @app.route('/redfish/v1/Systems', methods=['GET'])
